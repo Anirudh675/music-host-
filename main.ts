@@ -156,8 +156,31 @@ async function gzipJson(body: unknown): Promise<Response> {
   });
 }
 
+// Directory this file lives in, so static assets resolve correctly
+// regardless of the working directory Deno Deploy runs from.
+const publicDir = new URL('./public/', import.meta.url);
+
+async function serveStatic(relativePath: string, contentType: string): Promise<Response> {
+  try {
+    const bytes = await Deno.readFile(new URL(relativePath, publicDir));
+    return new Response(bytes, { headers: { 'content-type': contentType } });
+  } catch {
+    return new Response('not found', { status: 404 });
+  }
+}
+
 Deno.serve(async (req) => {
   const url = new URL(req.url);
+
+  // --- Join page (static) ---------------------------------------------------
+  // Any /join/<code> path serves the same HTML shell; join.js reads the
+  // code out of the URL itself, so no server-side templating is needed.
+  if (url.pathname.startsWith('/join/')) {
+    return serveStatic('join.html', 'text/html; charset=utf-8');
+  }
+  if (url.pathname === '/join.js') {
+    return serveStatic('join.js', 'application/javascript; charset=utf-8');
+  }
 
   // --- WebSocket upgrade ---------------------------------------------------
   if (url.pathname === '/ws') {
