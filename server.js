@@ -19,6 +19,7 @@ import { randomBytes } from 'crypto';
 import { readFile } from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import QRCode from 'qrcode';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, 'public');
@@ -98,6 +99,25 @@ app.get('/join/:code', async (req, res) => {
     res.type('html').send(html);
   } catch (e) {
     res.status(500).send('join page missing');
+  }
+});
+
+// Renders the join URL as a PNG. This exists specifically so Android Auto
+// can show the QR as "album art" - Auto already knows how to fetch an
+// http(s) artUri (same mechanism as normal cover art), so this avoids
+// needing a content:// FileProvider setup on the Android side entirely.
+app.get('/session/:code/qr.png', async (req, res) => {
+  const session = getLiveSession(req.params.code);
+  if (!session) return res.status(404).send('session-not-found-or-expired');
+
+  const joinUrl = `${req.protocol}://${req.get('host')}/join/${req.params.code}`;
+  try {
+    const png = await QRCode.toBuffer(joinUrl, { width: 600, margin: 2 });
+    res.set('Content-Type', 'image/png');
+    res.set('Cache-Control', 'no-store'); // code could change session-to-session
+    res.send(png);
+  } catch (e) {
+    res.status(500).send('qr-generation-failed');
   }
 });
 
